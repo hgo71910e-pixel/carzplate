@@ -3925,22 +3925,33 @@ async function activatePlateNFT(){
       return;
     }
 
+    // Тестовый адрес для минтинга (временно принудительно)
+    const _mintWallet='0QBjA6mWzGBf-j9vHjcuhRss1VU4ka0jWjd9BfRK93xHO745';
     const r=await fetch(`${SERVER_URL}/nft/mint`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         telegram_id:myId,
         plate_key:plateKey,
-        wallet_address:tonWalletAddress
+        wallet_address:_mintWallet
       })
     });
     const data=await r.json();
 
     if(data.ok){
-      item.nftActivated=true;
-      item.nftAddress=data.nft_address;
-      item.nftImageUrl=data.image_url;
-      item.nftMetadataUrl=data.metadata_url;
+      // Удаляем номер из инвентаря — он теперь NFT
+      const plateIdx=inventory.indexOf(item);
+      if(plateIdx>-1) inventory.splice(plateIdx,1);
+      // Сохраняем в отдельный массив NFT номеров
+      if(!window.myNFTs) window.myNFTs=[];
+      window.myNFTs.push({
+        ...item,
+        nftActivated:true,
+        nftAddress:data.nft_address,
+        nftImageUrl:data.image_url,
+        nftMetadataUrl:data.metadata_url,
+        mintedAt:Date.now()
+      });
       renderInventory();
       saveGame();
       closePlateActivation();
@@ -4121,8 +4132,9 @@ function mktRenderMyNums(){
   if(!page)return;
   const myId=getMyId();
 
-  // NFT номера из инвентаря
-  const nftPlates=inventory.filter(it=>it.nftActivated);
+  // NFT номера
+  if(!window.myNFTs) window.myNFTs=[];
+  const nftPlates=window.myNFTs;
   // Номера на продаже (старый маркет)
   const myLots=window.mktListings.filter(l=>l.ownerId===myId);
 
@@ -5605,6 +5617,7 @@ function loadGame(){
     if(typeof data.totalSpins==='number') totalSpins=data.totalSpins;
     if(typeof data.registeredAt==='number') registeredAt=data.registeredAt;
     if(typeof data.tonWalletAddress==='string') tonWalletAddress=data.tonWalletAddress;
+    if(Array.isArray(data.myNFTs)) window.myNFTs=data.myNFTs;
     if(typeof data.currentTheme==='string') currentTheme=data.currentTheme;
     if(typeof data.currentLang==='string') currentLang=data.currentLang;
     return true;
