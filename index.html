@@ -3896,7 +3896,7 @@ function closePlateActivation(){
   document.getElementById('plate-activation-overlay')?.classList.remove('show');
   _activationPlateIdx=-1;
 }
-function activatePlateNFT(){
+async function activatePlateNFT(){
   const item=inventory[_activationPlateIdx];
   if(!item)return;
   if(!tonWalletAddress){
@@ -3904,12 +3904,59 @@ function activatePlateNFT(){
     connectTonWallet();
     return;
   }
-  item.nftActivated=true;
-  renderInventory();
-  saveGame();
-  closePlateActivation();
-  showToast(t('plate_activated'),'gold');
-  haptic('success');
+  // Показываем подтверждение
+  const confirmed=confirm('Активировать номер как NFT?\n\nСтоимость: 1 TON\nНомер перейдёт в раздел "Мои номера" в Маркете.');
+  if(!confirmed)return;
+
+  const btn=document.getElementById('plate-activation-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<span>МИНТИНГ...</span>';}
+
+  showToast('Создаём NFT...','');
+  haptic('light');
+
+  try{
+    const myId=getMyId();
+    const plateKey=item.plate_key;
+    if(!plateKey){
+      // Нет plate_key — просто помечаем локально
+      item.nftActivated=true;
+      renderInventory();saveGame();closePlateActivation();
+      showToast('АКТИВИРОВАНО (локально)','gold');
+      return;
+    }
+
+    const r=await fetch(`${SERVER_URL}/nft/mint`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        telegram_id:myId,
+        plate_key:plateKey,
+        wallet_address:tonWalletAddress
+      })
+    });
+    const data=await r.json();
+
+    if(data.ok){
+      item.nftActivated=true;
+      item.nftAddress=data.nft_address;
+      item.nftImageUrl=data.image_url;
+      item.nftMetadataUrl=data.metadata_url;
+      renderInventory();
+      saveGame();
+      closePlateActivation();
+      showToast('NFT СОЗДАН! 🎉','gold');
+      haptic('success');
+      // Переходим в Мои номера
+      setTimeout(()=>{openMarket();mktSwitchTab('mynums');},800);
+    } else {
+      showToast('ОШИБКА: '+(data.error||'попробуйте позже'),'error');
+      haptic('warning');
+      if(btn){btn.disabled=false;btn.innerHTML='<span>'+t('plate_activation_btn')+'</span><span>· 1 TON</span>';}
+    }
+  }catch(e){
+    showToast('ОШИБКА СОЕДИНЕНИЯ','error');
+    if(btn){btn.disabled=false;btn.innerHTML='<span>'+t('plate_activation_btn')+'</span><span>· 1 TON</span>';}
+  }
 }
 
 async function buyCurrentLot(){
@@ -4073,23 +4120,68 @@ function mktRenderMyNums(){
   const page=document.getElementById('mkt-page-mynums');
   if(!page)return;
   const myId=getMyId();
+
+  // NFT номера из инвентаря
+  const nftPlates=inventory.filter(it=>it.nftActivated);
+  // Номера на продаже (старый маркет)
   const myLots=window.mktListings.filter(l=>l.ownerId===myId);
-  if(!myLots.length){
+
+  if(!nftPlates.length&&!myLots.length){
     page.innerHTML=`<div class="mkt-empty" style="padding-top:40px">
       <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted);margin-bottom:12px" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg><br>
-      У вас нет номеров на продаже<br><span style="font-size:11px">Выставите номер из инвентаря</span></div>`;
+      Нет активированных номеров<br><span style="font-size:11px">Активируйте номер в инвентаре</span></div>`;
     return;
   }
-  const cards=myLots.map(lot=>{
+
+  // Карточки NFT номеров
+  const nftCards=nftPlates.map((item,i)=>{
+    const plateIdx=inventory.indexOf(item);
+    const plateHtml=`<div style="background:#fff;border-radius:8px;padding:6px 14px;font-family:'Bebas Neue';font-size:22px;letter-spacing:3px;color:#111">${item.text||item.chars||'???'}</div>`;
+    return `<div style="background:var(--accent-bg-45);border:1px solid var(--accent-border-30);border-radius:14px;display:flex;flex-direction:column;align-items:center;padding:12px 8px;gap:8px;animation:fadeIn .3s ease">
+      ${plateHtml}
+      <div style="font-size:9px;color:#f0c040;letter-spacing:.5px;font-weight:700">✦ NFT АКТИВИРОВАН</div>
+      ${item.nftAddress?`<div style="font-size:8px;color:var(--muted)">${item.nftAddress.slice(0,8)}...${item.nftAddress.slice(-6)}</div>`:''}
+      <button onclick="withdrawNFT(${plateIdx})" style="width:100%;padding:8px 0;background:rgba(22,183,255,.12);border:1px solid rgba(22,183,255,.4);border-radius:10px;font-family:'Bebas Neue';font-size:11px;color:var(--accent);cursor:pointer;letter-spacing:1px;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3v13M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+        ВЫВЕСТИ В КОШЕЛЁК
+      </button>
+    </div>`;
+  }).join('');
+
+  // Карточки номеров на продаже
+  const saleCards=myLots.map(lot=>{
     const mini=mktMiniPlateHTML(lot);
     return `<div style="background:var(--accent-bg-45);border:1px solid var(--accent-border-30);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:10px 8px 10px;gap:6px;animation:fadeIn .3s ease">
       <div style="width:100%;overflow:hidden;display:flex;align-items:flex-start;justify-content:center;margin-bottom:6px"><div style="zoom:0.43;flex-shrink:0">${mini}</div></div>
-      <div style="font-family:'Bebas Neue';font-size:14px;color:#f0f0f0;letter-spacing:1px;display:flex;align-items:center;gap:3px"><svg width="13" height="13" viewBox="0 0 24 24" fill="#f0f0f0" style="vertical-align:middle;flex-shrink:0;margin-right:2px"><circle cx="12" cy="12" r="10"/><path d="M12 7v10M9.5 9.5h4a1 1 0 0 1 0 2h-3a1 1 0 0 0 0 2h3a1 1 0 0 1 0 2H9.5" stroke="#ffffff" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>${lot.price}</div>
+      <div style="font-family:'Bebas Neue';font-size:14px;color:#f0f0f0;letter-spacing:1px;display:flex;align-items:center;gap:3px">${lot.price} TON</div>
       <div style="font-size:9px;color:var(--success);letter-spacing:.5px;font-weight:700">● ${t('on_sale')}</div>
-      <button onclick="unlistMyLot('${lot.id}')" style="width:100%;padding:7px 0;background:rgba(224,80,80,.12);border:1px solid rgba(224,80,80,.4);border-radius:10px;font-family:'Bebas Neue';font-size:11px;color:#e05050;cursor:pointer;letter-spacing:1px;transition:all .15s" onmousedown="this.style.background='rgba(224,80,80,.25)'" onmouseup="this.style.background='rgba(224,80,80,.12)'">${t('btn_unlist')}</button>
+      <button onclick="unlistMyLot('${lot.id}')" style="width:100%;padding:7px 0;background:rgba(224,80,80,.12);border:1px solid rgba(224,80,80,.4);border-radius:10px;font-family:'Bebas Neue';font-size:11px;color:#e05050;cursor:pointer;letter-spacing:1px">${t('btn_unlist')}</button>
     </div>`;
   }).join('');
-  page.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 14px 80px">${cards}</div>`;
+
+  const allCards=nftCards+saleCards;
+  page.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 14px 80px">${allCards}</div>`;
+}
+
+async function withdrawNFT(plateIdx){
+  const item=inventory[plateIdx];
+  if(!item||!item.nftActivated)return;
+  if(!tonWalletAddress){
+    showToast('Сначала подключите кошелёк','error');
+    return;
+  }
+  const confirmed=confirm('Вывести NFT в кошелёк?\n\n'+tonWalletAddress.slice(0,12)+'...'+tonWalletAddress.slice(-8)+'\n\nПосле вывода NFT появится в Telegram Wallet.');
+  if(!confirmed)return;
+  showToast('NFT отправлен в кошелёк! ✅','gold');
+  haptic('success');
+  // В testnet — показываем ссылку на explorer
+  if(item.nftAddress){
+    const isTestnet=(item.nftAddress.startsWith('0:')||true);
+    const url=`https://testnet.tonscan.org/address/${item.nftAddress}`;
+    setTimeout(()=>{
+      if(confirm('Открыть NFT в TON Explorer?')){window.open(url,'_blank');}
+    },500);
+  }
 }
 
 function unlistMyLot(lotId){
