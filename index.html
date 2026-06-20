@@ -5679,33 +5679,9 @@ function toggleProfileStatsInfo(e){
 }
 
 let _tonConnectUI=null;
-function rawToFriendlyTon(raw){
-  // Converts 0:abcd... to UQ... (user-friendly bounceable)
-  try {
-    if(!raw||!raw.includes(':')) return raw;
-    const parts=raw.split(':');
-    const wc=parseInt(parts[0]);
-    const hexAddr=parts[1];
-    if(hexAddr.length!==64) return raw;
-    const addr=new Uint8Array(36);
-    addr[0]=0x11; // bounceable + testnet=false
-    addr[1]=wc&0xff;
-    for(let i=0;i<32;i++) addr[i+2]=parseInt(hexAddr.slice(i*2,i*2+2),16);
-    let crc=0xffff;
-    for(let i=0;i<34;i++){
-      crc^=addr[i]<<8;
-      for(let j=0;j<8;j++) crc=(crc&0x8000)?(crc<<1)^0x1021:(crc<<1);
-    }
-    crc&=0xffff;
-    addr[34]=(crc>>8)&0xff;
-    addr[35]=crc&0xff;
-    return btoa(String.fromCharCode(...addr)).replace(/\+/g,'-').replace(/\//g,'_');
-  } catch(e){ return raw; }
-}
 function shortTonAddress(addr){
   if(!addr) return t('wallet_connect');
-  const friendly=rawToFriendlyTon(addr);
-  const a=String(friendly);
+  const a=String(addr);
   return a.length>10 ? `${a.slice(0,4)}...${a.slice(-4)}` : a;
 }
 function updateTonWalletUI(){
@@ -5759,15 +5735,9 @@ async function connectTonWallet(){
   try{
     const ui=await getTonConnectUI();
     if(ui){
-      // Если уже подключён — берём адрес сразу
-      const existingAddr=ui.account?.address||'';
-      if(existingAddr){
-        tonWalletAddress=existingAddr;
-        updateTonWalletUI();
-        saveGame();
-        return;
-      }
-      // Открываем модал подключения — адрес придёт через onStatusChange
+      // Сначала отключаем старую сессию чтобы пользователь выбрал кошелёк заново
+      try{ await ui.disconnect(); }catch(e){}
+      // Открываем модал — адрес придёт через onStatusChange после подтверждения
       await ui.openModal();
     }
   }catch(e){ console.error('TON connect error:', e); }
