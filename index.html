@@ -3916,12 +3916,35 @@ async function activatePlateNFT(){
 
   try{
     const myId=getMyId();
-    const plateKey=item.plate_key;
+    let plateKey=item.plate_key;
+
+    // Если нет plate_key — сначала клеймим номер на сервере
     if(!plateKey){
-      // Нет plate_key — просто помечаем локально
-      item.nftActivated=true;
-      renderInventory();saveGame();closePlateActivation();
-      showToast('АКТИВИРОВАНО (локально)','gold');
+      try{
+        const rawText=(item.text||'');
+        const chars=rawText.replace(/[^a-zA-Z0-9А-Яа-я]/g,'').substring(0,10)||'PLATE';
+        const claimR=await fetch(`${SERVER_URL}/plate/claim`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            telegram_id:myId,
+            country:item.country||'RU',
+            region:item.rc||item.rname||'',
+            chars:chars,
+            upgrades:''
+          })
+        });
+        const claimData=await claimR.json();
+        if(claimData.plate_key){
+          plateKey=claimData.plate_key;
+          item.plate_key=plateKey;
+        }
+      }catch(e){ console.error('claim error',e); }
+    }
+
+    if(!plateKey){
+      showToast('ОШИБКА: не удалось зарегистрировать номер','error');
+      if(btn){btn.disabled=false;btn.innerHTML='<span>'+t('plate_activation_btn')+'</span><span>· 1 TON</span>';}
       return;
     }
 
