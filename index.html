@@ -5978,19 +5978,25 @@ async function apiSyncPlayer(){
         username:tg?.username||tg?.first_name||'player',
         coins:localCoins,
         total_spins:totalSpins,
-        total_coins_earned:totalCoinsEarned
+        total_coins_earned:totalCoinsEarned,
+        ton_wallet_address:tonWalletAddress||null
       })
     });
     const data=await r.json();
-    if(data.ok&&data.player&&typeof data.player.coins==='number'){
-      const serverCoins=data.player.coins;
+    const playerData=data.player||data;
+    if(data.ok&&typeof playerData.coins==='number'){
+      if(typeof playerData.ton_wallet_address==='string'&&playerData.ton_wallet_address){
+        tonWalletAddress=playerData.ton_wallet_address;
+        updateTonWalletUI();
+      }
+      const serverCoins=playerData.coins;
       coins=serverCoins;
       // Если сервер вернул статистику — обновляем локальные значения
-      if(typeof data.player.total_spins==='number') totalSpins=data.player.total_spins;
-      if(typeof data.player.total_coins_earned==='number') totalCoinsEarned=data.player.total_coins_earned;
+      if(typeof playerData.total_spins==='number') totalSpins=playerData.total_spins;
+      if(typeof playerData.total_coins_earned==='number') totalCoinsEarned=playerData.total_coins_earned;
       // Сохраняем дату регистрации с сервера
-      if(data.player.created_at && !registeredAt){
-        registeredAt=new Date(data.player.created_at).getTime();
+      if(playerData.created_at && !registeredAt){
+        registeredAt=new Date(playerData.created_at).getTime();
       }
       updateCoinsUI();
       saveGame();
