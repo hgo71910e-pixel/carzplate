@@ -4154,11 +4154,8 @@ function mktRenderMyNums(){
   const page=document.getElementById('mkt-page-mynums');
   if(!page)return;
   const myId=getMyId();
-
-  // NFT номера
   if(!window.myNFTs) window.myNFTs=[];
   const nftPlates=window.myNFTs;
-  // Номера на продаже (старый маркет)
   const myLots=window.mktListings.filter(l=>l.ownerId===myId);
 
   if(!nftPlates.length&&!myLots.length){
@@ -4168,55 +4165,138 @@ function mktRenderMyNums(){
     return;
   }
 
-  // Карточки NFT номеров
+  // NFT карточки — точно такой же стиль как лот в маркете
   const nftCards=nftPlates.map((item,i)=>{
-    const plateIdx=inventory.indexOf(item);
-    const plateHtml=`<div style="background:#fff;border-radius:8px;padding:6px 14px;font-family:'Bebas Neue';font-size:22px;letter-spacing:3px;color:#111">${item.text||item.chars||'???'}</div>`;
-    return `<div style="background:var(--accent-bg-45);border:1px solid var(--accent-border-30);border-radius:14px;display:flex;flex-direction:column;align-items:center;padding:12px 8px;gap:8px;animation:fadeIn .3s ease">
-      ${plateHtml}
-      <div style="font-size:9px;color:#f0c040;letter-spacing:.5px;font-weight:700">✦ NFT АКТИВИРОВАН</div>
-      ${item.nftAddress?`<div style="font-size:8px;color:var(--muted)">${item.nftAddress.slice(0,8)}...${item.nftAddress.slice(-6)}</div>`:''}
-      <button onclick="withdrawNFT(${plateIdx})" style="width:100%;padding:8px 0;background:rgba(22,183,255,.12);border:1px solid rgba(22,183,255,.4);border-radius:10px;font-family:'Bebas Neue';font-size:11px;color:var(--accent);cursor:pointer;letter-spacing:1px;display:flex;align-items:center;justify-content:center;gap:6px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3v13M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
-        ВЫВЕСТИ В КОШЕЛЁК
-      </button>
+    const mini=mktMiniPlateHTML(item);
+    const isOnSale=!!item.nftSalePrice;
+    return `<div class="mkt-lot-card" onclick="openMyNFTDetail(${i})">
+      <div class="mkt-lot-plate" style="width:100%;overflow:hidden;display:flex;align-items:flex-start;justify-content:center;margin-bottom:6px"><div style="zoom:0.43;flex-shrink:0">${mini}</div></div>
+      ${isOnSale
+        ?`<div class="mkt-lot-price" style="display:flex;align-items:center;gap:4px">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            ${item.nftSalePrice} TON
+          </div>
+          <div style="font-size:9px;color:var(--success);letter-spacing:.5px;font-weight:700">● НА ПРОДАЖЕ</div>`
+        :`<div style="font-size:9px;color:#f0c040;letter-spacing:.5px;font-weight:700">✦ NFT</div>`
+      }
     </div>`;
   }).join('');
 
-  // Карточки номеров на продаже
+  // Лоты на продаже (обычный маркет)
   const saleCards=myLots.map(lot=>{
     const mini=mktMiniPlateHTML(lot);
-    return `<div style="background:var(--accent-bg-45);border:1px solid var(--accent-border-30);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:10px 8px 10px;gap:6px;animation:fadeIn .3s ease">
-      <div style="width:100%;overflow:hidden;display:flex;align-items:flex-start;justify-content:center;margin-bottom:6px"><div style="zoom:0.43;flex-shrink:0">${mini}</div></div>
-      <div style="font-family:'Bebas Neue';font-size:14px;color:#f0f0f0;letter-spacing:1px;display:flex;align-items:center;gap:3px">${lot.price} TON</div>
-      <div style="font-size:9px;color:var(--success);letter-spacing:.5px;font-weight:700">● ${t('on_sale')}</div>
-      <button onclick="unlistMyLot('${lot.id}')" style="width:100%;padding:7px 0;background:rgba(224,80,80,.12);border:1px solid rgba(224,80,80,.4);border-radius:10px;font-family:'Bebas Neue';font-size:11px;color:#e05050;cursor:pointer;letter-spacing:1px">${t('btn_unlist')}</button>
+    return `<div class="mkt-lot-card" onclick="openMyLotDetail('${lot.id}')">
+      <div class="mkt-lot-plate" style="width:100%;overflow:hidden;display:flex;align-items:flex-start;justify-content:center;margin-bottom:6px"><div style="zoom:0.43;flex-shrink:0">${mini}</div></div>
+      <div class="mkt-lot-price" style="display:flex;align-items:center;gap:3px"><svg width="13" height="13" viewBox="0 0 24 24" fill="var(--accent)"><circle cx="12" cy="12" r="10"/><path d="M12 7v10M9.5 9.5h4a1 1 0 0 1 0 2h-3a1 1 0 0 0 0 2h3a1 1 0 0 1 0 2H9.5" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>${lot.price}</div>
+      <div style="font-size:9px;color:var(--success);letter-spacing:.5px;font-weight:700">● НА ПРОДАЖЕ</div>
     </div>`;
   }).join('');
 
-  const allCards=nftCards+saleCards;
-  page.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 14px 80px">${allCards}</div>`;
+  page.innerHTML=`<div class="mkt-listing" style="padding:10px 14px 80px">${nftCards}${saleCards}</div>`;
 }
 
-async function withdrawNFT(plateIdx){
-  const item=inventory[plateIdx];
-  if(!item||!item.nftActivated)return;
+// Детальный просмотр своего NFT
+function openMyNFTDetail(idx){
+  playClick();
+  const item=window.myNFTs[idx];
+  if(!item)return;
+  const mini=mktMiniPlateHTML(item);
+  const isOnSale=!!item.nftSalePrice;
+
+  // Кнопки: [✏️ изменить цену (если на продаже)] [ПРОДАТЬ] [↓ ВЫВЕСТИ]
+  const editBtn=isOnSale
+    ?`<button onclick="editNFTPrice(${idx})" style="padding:12px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:12px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Изменить цену">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>`
+    :'';
+
+  const sellBtn=`<button onclick="sellNFT(${idx})" style="flex:1;padding:14px 0;background:${isOnSale?'rgba(224,80,80,.85)':'rgba(22,183,255,.85)'};border:none;border-radius:12px;font-family:'Bebas Neue';font-size:15px;letter-spacing:1.5px;color:#fff;cursor:pointer">
+    ${isOnSale?'СНЯТЬ С ПРОДАЖИ':'ПРОДАТЬ'}
+  </button>`;
+
+  const withdrawBtn=`<button onclick="withdrawNFT(${idx})" style="flex:1;padding:14px 0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;color:#fff;cursor:pointer;font-family:'Bebas Neue';font-size:15px;letter-spacing:1.5px" title="Вывести в кошелёк">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3v13M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+    ВЫВЕСТИ
+  </button>`;
+
+  // Показываем через оверлей детали лота
+  const ov=document.getElementById('mkt-lot-detail-overlay');
+  if(!ov)return;
+  document.getElementById('mkt-lot-detail-plate').innerHTML=`<div style="overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%;height:80px"><div style="display:inline-block;transform:scale(0.65);transform-origin:center center;white-space:nowrap">${mini}</div></div>`;
+  document.getElementById('mkt-lot-detail-upgs').innerHTML=`<span style='font-size:11px;color:var(--muted)'>NFT номер</span>`;
+  document.getElementById('mkt-lot-detail-price').innerHTML=isOnSale?`${item.nftSalePrice} TON`:'Не выставлен';
+  document.getElementById('mkt-lot-detail-seller').textContent='';
+
+  // Подменяем кнопку покупки на наши кнопки
+  const buyBtn=document.getElementById('mkt-lot-buy-btn');
+  buyBtn.style.display='none';
+  const btnArea=buyBtn.parentElement;
+
+  // Удаляем старые кастомные кнопки если есть
+  const old=btnArea.querySelector('.nft-btn-row');
+  if(old)old.remove();
+
+  const row=document.createElement('div');
+  row.className='nft-btn-row';
+  row.style.cssText='display:flex;gap:8px;width:100%;margin-top:8px';
+  row.innerHTML=editBtn+sellBtn+withdrawBtn;
+  btnArea.appendChild(row);
+
+  ov.classList.add('show');
+}
+
+function openMyLotDetail(lotId){
+  const lot=window.mktListings.find(l=>l.id===lotId);
+  if(!lot)return;
+  openMktLotDetail(lotId);
+}
+
+async function sellNFT(idx){
+  const item=window.myNFTs[idx];
+  if(!item)return;
+  if(item.nftSalePrice){
+    // Снять с продажи
+    item.nftSalePrice=null;
+    saveGame();
+    mktRenderMyNums();
+    closeMktLotDetail();
+    showToast('Снято с продажи','');
+    return;
+  }
+  const price=prompt('Цена продажи в TON:');
+  if(!price||isNaN(price)||Number(price)<=0)return;
+  item.nftSalePrice=Number(price);
+  saveGame();
+  mktRenderMyNums();
+  closeMktLotDetail();
+  showToast('Выставлено на продажу за '+price+' TON','gold');
+  haptic('success');
+}
+
+async function editNFTPrice(idx){
+  const item=window.myNFTs[idx];
+  if(!item)return;
+  const price=prompt('Новая цена в TON:',item.nftSalePrice||'');
+  if(!price||isNaN(price)||Number(price)<=0)return;
+  item.nftSalePrice=Number(price);
+  saveGame();
+  mktRenderMyNums();
+  closeMktLotDetail();
+  showToast('Цена обновлена: '+price+' TON','gold');
+}
+
+async function withdrawNFT(idx){
+  const item=window.myNFTs[idx];
+  if(!item)return;
   if(!tonWalletAddress){
     showToast('Сначала подключите кошелёк','error');
     return;
   }
-  const confirmed=confirm('Вывести NFT в кошелёк?\n\n'+tonWalletAddress.slice(0,12)+'...'+tonWalletAddress.slice(-8)+'\n\nПосле вывода NFT появится в Telegram Wallet.');
+  const confirmed=confirm('Вывести NFT в кошелёк?\n\nПосле вывода NFT появится в Telegram Wallet.');
   if(!confirmed)return;
+  closeMktLotDetail();
   showToast('NFT отправлен в кошелёк! ✅','gold');
   haptic('success');
-  // В testnet — показываем ссылку на explorer
-  if(item.nftAddress){
-    const isTestnet=(item.nftAddress.startsWith('0:')||true);
-    const url=`https://testnet.tonscan.org/address/${item.nftAddress}`;
-    setTimeout(()=>{
-      if(confirm('Открыть NFT в TON Explorer?')){window.open(url,'_blank');}
-    },500);
-  }
 }
 
 function unlistMyLot(lotId){
